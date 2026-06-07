@@ -226,7 +226,6 @@ if ($submitted) {
 <style>
   pre.hamdat-out { font-size: .82rem; white-space: pre-wrap; word-break: break-all; }
   code.cli-cmd   { font-size: .88rem; word-break: break-all; color: #7fffb2; }
-  .table-scroll  { max-height: 70vh; overflow-y: auto; }
   .table-scroll thead th { position: sticky; top: 0; z-index: 1; }
   .date-help     { font-size: .75rem; }
   #search-overlay {
@@ -294,7 +293,7 @@ if ($submitted) {
           </div>
           <div class="mt-auto">
             <button type="submit" name="search_mode" value="call"
-                    class="btn btn-primary w-100">
+                    id="btn-call-lookup" class="btn btn-primary w-100">
               Lookup Callsign
             </button>
           </div>
@@ -464,6 +463,7 @@ if ($submitted) {
     <?php if (empty($tbl_rows)): ?>
     <div class="card-body text-muted">No results found.</div>
     <?php else: ?>
+    <?php $call_col = array_search('call_sign', $tbl_headers); ?>
     <div class="table-scroll">
       <table class="table table-sm table-striped table-hover mb-0">
         <thead class="table-dark">
@@ -476,8 +476,17 @@ if ($submitted) {
         <tbody>
           <?php foreach ($tbl_rows as $row): ?>
           <tr>
-            <?php foreach ($row as $cell): ?>
+            <?php foreach ($row as $ci => $cell): ?>
+            <?php if ($ci === $call_col && $call_col !== false): ?>
+            <td class="text-nowrap">
+              <a href="#" class="fw-semibold text-decoration-none"
+                 onclick="lookupCall(<?= json_encode((string) $cell) ?>);return false;">
+                <?= esc((string) $cell) ?>
+              </a>
+            </td>
+            <?php else: ?>
             <td class="text-nowrap"><?= esc((string) $cell) ?></td>
+            <?php endif; ?>
             <?php endforeach; ?>
           </tr>
           <?php endforeach; ?>
@@ -498,24 +507,52 @@ if ($submitted) {
   var form    = document.getElementById('sf');
   var overlay = document.getElementById('search-overlay');
 
+  function spinBtn(btn, label) {
+    btn.style.pointerEvents = 'none';
+    btn.innerHTML =
+      '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>'
+      + label;
+  }
+
   form.addEventListener('submit', function (e) {
     var btn = e.submitter;
     if (!btn) return;
 
-    // Prevent double-submit without using .disabled — disabled inputs are stripped
-    // from the POST payload, which would drop the button's name/value entirely.
-    btn.style.pointerEvents = 'none';
-
     if (btn.name === 'search_mode') {
-      btn.innerHTML =
-        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>'
-        + 'Searching…';
-      // Overlay only for search queries; downloads don't reload the page
-      setTimeout(function () {
-        overlay.style.display = 'flex';
-      }, 400);
+      // Search: spinner + overlay. Page reloads so no reset needed.
+      spinBtn(btn, 'Searching…');
+      setTimeout(function () { overlay.style.display = 'flex'; }, 400);
+
+    } else if (btn.name === 'download_format') {
+      // Download: spinner + overlay, but page does NOT reload after file delivery,
+      // so we reset the UI when the window regains focus or visibility.
+      var origHTML     = btn.innerHTML;
+      var overlayTimer = setTimeout(function () { overlay.style.display = 'flex'; }, 400);
+      var fallbackTimer;
+
+      function reset() {
+        clearTimeout(overlayTimer);
+        clearTimeout(fallbackTimer);
+        overlay.style.display = 'none';
+        btn.style.pointerEvents = '';
+        btn.innerHTML = origHTML;
+        window.removeEventListener('focus', reset);
+        document.removeEventListener('visibilitychange', onVisible);
+      }
+      function onVisible() { if (!document.hidden) reset(); }
+
+      spinBtn(btn, 'Preparing…');
+      window.addEventListener('focus', reset);
+      document.addEventListener('visibilitychange', onVisible);
+      fallbackTimer = setTimeout(reset, 15000); // safety net
     }
   });
+
+  // Populate the callsign field and trigger a single-callsign lookup.
+  window.lookupCall = function (callsign) {
+    document.querySelector('[name="call"]').value = callsign;
+    document.getElementById('btn-call-lookup').click();
+  };
 }());
 </script>
 </body>
