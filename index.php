@@ -251,7 +251,6 @@ if ($submitted) {
 
 <form method="post" id="sf">
 <input type="hidden" name="download_format" value="">
-<input type="hidden" name="search_mode" value="">
 
 <div class="container-fluid py-3 px-4">
 
@@ -500,22 +499,22 @@ if ($submitted) {
   var overlay = document.getElementById('search-overlay');
 
   form.addEventListener('submit', function (e) {
-    // e.submitter is the button that triggered the submit (more reliable than activeElement)
     var btn = e.submitter;
-    if (btn && btn.name) {
-      // Copy the button's value into its matching hidden field before disabling,
-      // because disabled inputs are excluded from the POST payload.
-      var hidden = form.querySelector('input[type="hidden"][name="' + btn.name + '"]');
-      if (hidden) hidden.value = btn.value;
-      btn.disabled = true;
+    if (!btn) return;
+
+    // Prevent double-submit without using .disabled — disabled inputs are stripped
+    // from the POST payload, which would drop the button's name/value entirely.
+    btn.style.pointerEvents = 'none';
+
+    if (btn.name === 'search_mode') {
       btn.innerHTML =
         '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>'
         + 'Searching…';
+      // Overlay only for search queries; downloads don't reload the page
+      setTimeout(function () {
+        overlay.style.display = 'flex';
+      }, 400);
     }
-    // Delayed overlay: only appears if the query takes longer than 400ms
-    setTimeout(function () {
-      overlay.style.display = 'flex';
-    }, 400);
   });
 }());
 </script>
