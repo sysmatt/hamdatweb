@@ -140,78 +140,96 @@ $call_out     = null;
 $tbl_headers  = [];
 $tbl_rows     = [];
 $error_msg    = null;
-$submitted    = ($_SERVER['REQUEST_METHOD'] === 'POST');
+
+// GET ?call= comes from clicking a callsign link in the table (supports new-tab).
+$get_call  = strtoupper(trim($_GET['call'] ?? ''));
+$submitted = ($_SERVER['REQUEST_METHOD'] === 'POST') || $get_call !== '';
+
+// Pre-populate call field from whichever source is active.
+$call_prefill = esc($get_call ?: strtoupper(trim($_POST['call'] ?? '')));
+
+function do_call_lookup(string $call): void {
+    global $result_mode, $disp_cmd, $call_out, $error_msg;
+    $cmd      = build_cmd(['call' => $call, 'search_mode' => 'call']);
+    $disp_cmd = $cmd['disp'];
+    exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
+    if ($rc === 0) {
+        $call_out    = implode("\n", $exec_out);
+        $result_mode = 'call';
+    } else {
+        $error_msg   = implode("\n", $exec_out);
+        $result_mode = 'error';
+    }
+}
 
 if ($submitted) {
-    $dl_fmt      = praw('download_format');
-    $search_mode = praw('search_mode');
 
-    if ($dl_fmt !== '' && isset(FORMATS[$dl_fmt])) {
-        // ── Download: write to temp file, stream, exit ────────────────────
-        $tmp = tempnam(HAMDAT_TEMP_DIR, 'hamdatweb_') . '.' . $dl_fmt;
-        $cmd = build_cmd($_POST, $dl_fmt, $tmp);
-        $disp_cmd = $cmd['disp'];
-        exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
-        if ($rc === 0 && is_readable($tmp) && filesize($tmp) > 0) {
-            $mime = ['csv' => 'text/csv', 'json' => 'application/json', 'html' => 'text/html'];
-            header('Content-Type: ' . $mime[$dl_fmt]);
-            header('Content-Disposition: attachment; filename="hamdat_results.' . $dl_fmt . '"');
-            header('Content-Length: ' . filesize($tmp));
-            readfile($tmp);
-            @unlink($tmp);
-            exit;
-        }
-        $error_msg   = $rc !== 0
-            ? ('hamdat error: ' . implode("\n", $exec_out))
-            : 'Output file was not created or was empty.';
-        $result_mode = 'error';
-        @unlink($tmp);
+    if ($get_call !== '') {
+        // ── GET-based callsign lookup (table link, supports open-in-new-tab) ─
+        do_call_lookup($get_call);
 
-    } elseif ($search_mode === 'call') {
-        // ── Single callsign profile ───────────────────────────────────────
-        if (praw('call') === '') {
-            $error_msg   = 'Please enter a callsign to look up.';
-            $result_mode = 'error';
-        } else {
-            $cmd      = build_cmd($_POST);
+    } else {
+        $dl_fmt      = praw('download_format');
+        $search_mode = praw('search_mode');
+
+        if ($dl_fmt !== '' && isset(FORMATS[$dl_fmt])) {
+            // ── Download: write to temp file, stream, exit ────────────────
+            $tmp = tempnam(HAMDAT_TEMP_DIR, 'hamdatweb_') . '.' . $dl_fmt;
+            $cmd = build_cmd($_POST, $dl_fmt, $tmp);
             $disp_cmd = $cmd['disp'];
             exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
-            if ($rc === 0) {
-                $call_out    = implode("\n", $exec_out);
-                $result_mode = 'call';
-            } else {
-                $error_msg   = implode("\n", $exec_out);
-                $result_mode = 'error';
+            if ($rc === 0 && is_readable($tmp) && filesize($tmp) > 0) {
+                $mime = ['csv' => 'text/csv', 'json' => 'application/json', 'html' => 'text/html'];
+                header('Content-Type: ' . $mime[$dl_fmt]);
+                header('Content-Disposition: attachment; filename="hamdat_results.' . $dl_fmt . '"');
+                header('Content-Length: ' . filesize($tmp));
+                readfile($tmp);
+                @unlink($tmp);
+                exit;
             }
-        }
-
-    } elseif ($search_mode === 'search') {
-        // ── Multi-record search (CSV internally → HTML table) ─────────────
-        if (!has_search_criteria($_POST)) {
-            $error_msg   = 'Please enter at least one search criterion.';
+            $error_msg   = $rc !== 0
+                ? ('hamdat error: ' . implode("\n", $exec_out))
+                : 'Output file was not created or was empty.';
             $result_mode = 'error';
-        } else {
-            $tmp      = tempnam(HAMDAT_TEMP_DIR, 'hamdatweb_') . '.csv';
-            $cmd      = build_cmd($_POST, 'csv', $tmp);
-            $disp_cmd = build_cmd($_POST)['disp'];
-            exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
-            if ($rc !== 0) {
-                $error_msg   = 'hamdat error: ' . implode("\n", $exec_out);
-                $result_mode = 'error';
-            } elseif (is_readable($tmp)) {
-                if (($fh = fopen($tmp, 'r')) !== false) {
-                    $tbl_headers = fgetcsv($fh) ?: [];
-                    while (($row = fgetcsv($fh)) !== false) {
-                        $tbl_rows[] = $row;
-                    }
-                    fclose($fh);
-                }
-                $result_mode = 'table';
-            } else {
-                $error_msg   = 'No output file was produced.';
-                $result_mode = 'error';
-            }
             @unlink($tmp);
+
+        } elseif ($search_mode === 'call') {
+            // ── Single callsign profile (form button) ─────────────────────
+            if (praw('call') === '') {
+                $error_msg   = 'Please enter a callsign to look up.';
+                $result_mode = 'error';
+            } else {
+                do_call_lookup(strtoupper(praw('call')));
+            }
+
+        } elseif ($search_mode === 'search') {
+            // ── Multi-record search (CSV internally → HTML table) ──────────
+            if (!has_search_criteria($_POST)) {
+                $error_msg   = 'Please enter at least one search criterion.';
+                $result_mode = 'error';
+            } else {
+                $tmp      = tempnam(HAMDAT_TEMP_DIR, 'hamdatweb_') . '.csv';
+                $cmd      = build_cmd($_POST, 'csv', $tmp);
+                $disp_cmd = build_cmd($_POST)['disp'];
+                exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
+                if ($rc !== 0) {
+                    $error_msg   = 'hamdat error: ' . implode("\n", $exec_out);
+                    $result_mode = 'error';
+                } elseif (is_readable($tmp)) {
+                    if (($fh = fopen($tmp, 'r')) !== false) {
+                        $tbl_headers = fgetcsv($fh) ?: [];
+                        while (($row = fgetcsv($fh)) !== false) {
+                            $tbl_rows[] = $row;
+                        }
+                        fclose($fh);
+                    }
+                    $result_mode = 'table';
+                } else {
+                    $error_msg   = 'No output file was produced.';
+                    $result_mode = 'error';
+                }
+                @unlink($tmp);
+            }
         }
     }
 }
@@ -275,7 +293,7 @@ if ($submitted) {
           <div class="mb-3">
             <label class="form-label small mb-1">Callsign</label>
             <input type="text" name="call" class="form-control text-uppercase"
-                   value="<?= pv('call') ?>" placeholder="W1AW" autocomplete="off">
+                   value="<?= $call_prefill ?>" placeholder="W1AW" autocomplete="off">
           </div>
           <div class="form-check mb-2">
             <input type="checkbox" name="history" id="chk_hist" class="form-check-input"
@@ -479,8 +497,7 @@ if ($submitted) {
             <?php foreach ($row as $ci => $cell): ?>
             <?php if ($ci === $call_col && $call_col !== false): ?>
             <td class="text-nowrap">
-              <a href="#" class="fw-semibold text-decoration-none"
-                 onclick="lookupCall(<?= json_encode((string) $cell) ?>);return false;">
+              <a href="?call=<?= urlencode((string) $cell) ?>" class="fw-semibold text-decoration-none">
                 <?= esc((string) $cell) ?>
               </a>
             </td>
@@ -548,11 +565,7 @@ if ($submitted) {
     }
   });
 
-  // Populate the callsign field and trigger a single-callsign lookup.
-  window.lookupCall = function (callsign) {
-    document.querySelector('[name="call"]').value = callsign;
-    document.getElementById('btn-call-lookup').click();
-  };
+
 }());
 </script>
 </body>
