@@ -1,0 +1,3 @@
+# The live config lives in the docroot parent directory (../hamdatweb-config.php),
+# not inside this repo, so there is nothing to ignore here.
+# See hamdatweb-config.php.example for the template.

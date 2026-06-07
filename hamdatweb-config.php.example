@@ -1,0 +1,17 @@
+<?php
+// Copy this file to hamdatweb-config.php in the docroot (one level ABOVE the hamdatweb/ directory).
+// Example: if hamdatweb is cloned to /var/www/html/hamdatweb/, place this file at
+//          /var/www/html/hamdatweb-config.php
+//
+// This keeps your server-specific config outside the git repo so shallow clones
+// never overwrite it.
+
+// Full path to the hamdat binary
+define('HAMDAT_BIN', '/usr/local/bin/hamdat');
+
+// Full path to the hamdat SQLite database
+define('HAMDAT_DB', '/home/ubuntu/.hamdat/hamdat.db');
+
+// Writable temp directory used when generating download files.
+// The web server process must have write access. Defaults to sys_get_temp_dir() if omitted.
+// define('HAMDAT_TEMP_DIR', '/tmp');
