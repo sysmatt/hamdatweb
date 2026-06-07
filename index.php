@@ -251,6 +251,7 @@ if ($submitted) {
 
 <form method="post" id="sf">
 <input type="hidden" name="download_format" value="">
+<input type="hidden" name="search_mode" value="">
 
 <div class="container-fluid py-3 px-4">
 
@@ -498,10 +499,14 @@ if ($submitted) {
   var form    = document.getElementById('sf');
   var overlay = document.getElementById('search-overlay');
 
-  form.addEventListener('submit', function () {
-    // Immediate feedback: disable the clicked button and show inline spinner
-    var btn = document.activeElement;
-    if (btn && btn.type === 'submit' && btn.form === form) {
+  form.addEventListener('submit', function (e) {
+    // e.submitter is the button that triggered the submit (more reliable than activeElement)
+    var btn = e.submitter;
+    if (btn && btn.name) {
+      // Copy the button's value into its matching hidden field before disabling,
+      // because disabled inputs are excluded from the POST payload.
+      var hidden = form.querySelector('input[type="hidden"][name="' + btn.name + '"]');
+      if (hidden) hidden.value = btn.value;
       btn.disabled = true;
       btn.innerHTML =
         '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>'
