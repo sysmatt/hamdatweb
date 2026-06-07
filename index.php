@@ -235,42 +235,78 @@ if ($submitted) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
+<script>
+/* Apply saved theme before styles load — prevents flash of wrong theme */
+(function(){var t=localStorage.getItem('hdw-theme');if(t)document.documentElement.setAttribute('data-bs-theme',t);})();
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HamDat Web</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
+  /* ── Profile <pre> output ───────────────────────────────────────────── */
   pre.hamdat-out { font-size: 1rem; white-space: pre-wrap; word-break: break-all; }
-  code.cli-cmd   { font-size: .88rem; word-break: break-all; color: #7fffb2; }
+
+  /* ── CLI terminal card — always dark regardless of theme ────────────── */
+  code.cli-cmd { font-size: .88rem; word-break: break-all; color: #7fffb2; }
+  .cli-header  { background-color: #1a1d21 !important; color: #fff !important; }
+  .cli-body    { background-color: #0d1117 !important; }
+
+  /* ── Sticky result table headers ─────────────────────────────────────── */
   .table-scroll thead th { position: sticky; top: 0; z-index: 1; }
-  .date-help     { font-size: .75rem; }
+
+  /* ── Date format hint text ───────────────────────────────────────────── */
+  .date-help { font-size: .75rem; }
+
+  /* ── Loading overlay ─────────────────────────────────────────────────── */
   #search-overlay {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, .55);
+    background: rgba(0,0,0,.55);
     z-index: 9999;
     flex-direction: column;
     align-items: center;
     justify-content: center;
   }
+
+  /* ── Search card bodies: tinted so white inputs contrast clearly ─────── */
+  .search-pane { background-color: var(--bs-secondary-bg); }
+
+  /* ── Fieldset group frames with floating legend label ────────────────── */
+  fieldset.field-group {
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius-sm);
+    padding: .375rem .75rem .625rem;
+  }
+  fieldset.field-group > legend {
+    float: none;
+    width: auto;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    padding: 0 .3rem;
+    margin-bottom: .25rem;
+    line-height: 1.2;
+  }
 </style>
 </head>
-<body class="bg-light">
+<body class="bg-body-secondary">
 
-<!-- Loading overlay (shown after 400ms on submit) -->
+<!-- Loading overlay (shown ~400ms after submit) -->
 <div id="search-overlay" role="status" aria-live="polite">
-  <div class="spinner-border text-light" style="width: 3rem; height: 3rem;"></div>
+  <div class="spinner-border text-light" style="width:3rem;height:3rem;"></div>
   <div class="text-light mt-3 fs-5">Searching&hellip;</div>
 </div>
 
 <form method="post" id="sf">
 <input type="hidden" name="download_format" value="">
-<!-- Hidden default submit button — browser picks the first one when Enter is pressed.
-     Placing search_mode=search here makes Enter in any field trigger a multi-record search
-     rather than the callsign lookup button that appears first in visual DOM order. -->
+<!-- Off-screen default submit: browser fires the first submit button on Enter,
+     so placing search_mode=search here ensures Enter triggers a search, not callsign lookup. -->
 <button type="submit" name="search_mode" value="search"
         style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden"
         aria-hidden="true" tabindex="-1"></button>
@@ -283,149 +319,166 @@ if ($submitted) {
       HamDat Web
       <span class="text-muted fw-light fs-6">FCC Amateur License Search</span>
     </h1>
-    <small class="text-muted">
-      <?= esc(auth_user()) ?> &bull;
-      <a href="../simplewebauth/logout.php" class="text-muted">Sign out</a>
-    </small>
+    <div class="d-flex align-items-center gap-3">
+      <button type="button" id="btn-theme" class="btn btn-sm btn-outline-secondary">
+        🌙 Dark
+      </button>
+      <small class="text-muted">
+        <?= esc(auth_user()) ?> &bull;
+        <a href="../simplewebauth/logout.php" class="text-muted">Sign out</a>
+      </small>
+    </div>
   </div>
 
   <div class="row g-3 mb-3">
 
-    <!-- Single Callsign Lookup -->
+    <!-- ── Single Callsign Lookup ─────────────────────────────────────── -->
     <div class="col-xl-3 col-lg-4">
-      <div class="card h-100">
+      <div class="card h-100 shadow-sm">
         <div class="card-header fw-semibold">Single Callsign Lookup</div>
-        <div class="card-body d-flex flex-column">
-          <div class="mb-3">
+        <div class="card-body search-pane d-flex flex-column gap-3">
+
+          <div>
             <label class="form-label small mb-1">Callsign</label>
             <input type="text" name="call" class="form-control text-uppercase"
                    value="<?= $call_prefill ?>" placeholder="W1AW" autocomplete="off">
           </div>
-          <div class="form-check mb-2">
-            <input type="checkbox" name="history" id="chk_hist" class="form-check-input"
-                   <?= pchk('history') ? 'checked' : '' ?>>
-            <label for="chk_hist" class="form-check-label small">
-              History — compact list of prior licensees
-            </label>
-          </div>
-          <div class="form-check mb-3">
-            <input type="checkbox" name="full_history" id="chk_fhist" class="form-check-input"
-                   <?= pchk('full_history') ? 'checked' : '' ?>>
-            <label for="chk_fhist" class="form-check-label small">
-              Full history — complete profiles of prior licensees
-            </label>
-          </div>
+
+          <fieldset class="field-group">
+            <legend>History</legend>
+            <div class="form-check mb-1">
+              <input type="checkbox" name="history" id="chk_hist" class="form-check-input"
+                     <?= pchk('history') ? 'checked' : '' ?>>
+              <label for="chk_hist" class="form-check-label small">
+                Compact — list of prior licensees
+              </label>
+            </div>
+            <div class="form-check mb-0">
+              <input type="checkbox" name="full_history" id="chk_fhist" class="form-check-input"
+                     <?= pchk('full_history') ? 'checked' : '' ?>>
+              <label for="chk_fhist" class="form-check-label small">
+                Full — complete profiles of prior licensees
+              </label>
+            </div>
+          </fieldset>
+
           <div class="mt-auto">
             <button type="submit" name="search_mode" value="call"
                     id="btn-call-lookup" class="btn btn-primary w-100">
               Lookup Callsign
             </button>
           </div>
+
         </div>
       </div>
     </div>
 
-    <!-- Multi-record Search -->
+    <!-- ── Multi-record Search ────────────────────────────────────────── -->
     <div class="col-xl-9 col-lg-8">
-      <div class="card h-100">
+      <div class="card h-100 shadow-sm">
         <div class="card-header fw-semibold">
           Multi-record Search
           <span class="text-muted fw-normal small ms-2">— all filters AND together; Class values OR within themselves</span>
         </div>
-        <div class="card-body d-flex flex-column">
+        <div class="card-body search-pane d-flex flex-column gap-3">
 
-          <!-- Text search -->
-          <div class="row g-2 mb-3">
-            <div class="col-md-4">
-              <label class="form-label small mb-1">Callsign contains</label>
-              <input type="text" name="callsearch" class="form-control form-control-sm"
-                     value="<?= pv('callsearch') ?>">
+          <!-- Text search + regex -->
+          <fieldset class="field-group">
+            <legend>Text Search</legend>
+            <div class="row g-2 mb-2">
+              <div class="col-md-4">
+                <label class="form-label small mb-1">Callsign contains</label>
+                <input type="text" name="callsearch" class="form-control form-control-sm"
+                       value="<?= pv('callsearch') ?>">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small mb-1">Name contains</label>
+                <input type="text" name="name" class="form-control form-control-sm"
+                       value="<?= pv('name') ?>">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small mb-1">Address contains</label>
+                <input type="text" name="address" class="form-control form-control-sm"
+                       value="<?= pv('address') ?>">
+              </div>
             </div>
-            <div class="col-md-4">
-              <label class="form-label small mb-1">Name contains</label>
-              <input type="text" name="name" class="form-control form-control-sm"
-                     value="<?= pv('name') ?>">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small mb-1">Address contains</label>
-              <input type="text" name="address" class="form-control form-control-sm"
-                     value="<?= pv('address') ?>">
-            </div>
-          </div>
-
-          <!-- Regex -->
-          <div class="mb-3">
-            <div class="form-check">
+            <div class="form-check mb-0">
               <input type="checkbox" name="regex" id="chk_regex" class="form-check-input"
                      <?= pchk('regex') ? 'checked' : '' ?>>
               <label for="chk_regex" class="form-check-label small">
                 Treat callsign / name / address as regular expressions
               </label>
             </div>
-          </div>
+          </fieldset>
 
-          <!-- Class + Type -->
-          <div class="row g-2 mb-3">
+          <!-- License Class + Entity Type -->
+          <div class="row g-3">
             <div class="col-md-8">
-              <label class="form-label small mb-1">License Class</label>
-              <div class="d-flex flex-wrap gap-3">
-                <?php foreach (CLASSES as $code => $label): ?>
-                <div class="form-check mb-0">
-                  <input type="checkbox" name="class[]" id="cls_<?= $code ?>" value="<?= $code ?>"
-                         class="form-check-input"
-                         <?= in_array($code, parr('class'), true) ? 'checked' : '' ?>>
-                  <label for="cls_<?= $code ?>" class="form-check-label small">
-                    <strong><?= $code ?></strong> <?= $label ?>
-                  </label>
+              <fieldset class="field-group h-100">
+                <legend>License Class</legend>
+                <div class="d-flex flex-wrap gap-3 pt-1">
+                  <?php foreach (CLASSES as $code => $label): ?>
+                  <div class="form-check mb-0">
+                    <input type="checkbox" name="class[]" id="cls_<?= $code ?>" value="<?= $code ?>"
+                           class="form-check-input"
+                           <?= in_array($code, parr('class'), true) ? 'checked' : '' ?>>
+                    <label for="cls_<?= $code ?>" class="form-check-label small">
+                      <strong><?= $code ?></strong> <?= $label ?>
+                    </label>
+                  </div>
+                  <?php endforeach; ?>
                 </div>
-                <?php endforeach; ?>
-              </div>
+              </fieldset>
             </div>
             <div class="col-md-4">
-              <label class="form-label small mb-1">Entity Type</label>
-              <select name="type" class="form-select form-select-sm">
-                <option value="">Any</option>
-                <?php foreach (TYPES as $t): ?>
-                <option value="<?= $t ?>" <?= praw('type') === $t ? 'selected' : '' ?>>
-                  <?= ucfirst($t) ?>
-                </option>
-                <?php endforeach; ?>
-              </select>
+              <fieldset class="field-group h-100">
+                <legend>Entity Type</legend>
+                <select name="type" class="form-select form-select-sm">
+                  <option value="">Any</option>
+                  <?php foreach (TYPES as $t): ?>
+                  <option value="<?= $t ?>" <?= praw('type') === $t ? 'selected' : '' ?>>
+                    <?= ucfirst($t) ?>
+                  </option>
+                  <?php endforeach; ?>
+                </select>
+              </fieldset>
             </div>
           </div>
 
           <!-- Dates + ZIP -->
-          <div class="row g-2 mb-3">
-            <div class="col-sm-3">
-              <label class="form-label small mb-1">Grant Date</label>
-              <input type="text" name="grant_date" class="form-control form-control-sm"
-                     value="<?= pv('grant_date') ?>" placeholder="-30">
-              <div class="date-help text-muted mt-1">
-                <code>-30</code> &middot; <code>2025-01-01</code> &middot; <code>2025-01-01:2025-12-31</code><br>
-                <code>since:</code> <code>after:</code> <code>thru:</code> <code>before:</code>
+          <fieldset class="field-group">
+            <legend>Date &amp; Location</legend>
+            <div class="row g-2">
+              <div class="col-sm-3">
+                <label class="form-label small mb-1">Grant Date</label>
+                <input type="text" name="grant_date" class="form-control form-control-sm"
+                       value="<?= pv('grant_date') ?>" placeholder="-30">
+                <div class="date-help text-muted mt-1">
+                  <code>-30</code> &middot; <code>2025-01-01</code> &middot; <code>2025-01-01:2025-12-31</code><br>
+                  <code>since:</code> <code>after:</code> <code>thru:</code> <code>before:</code>
+                </div>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small mb-1">Change Date</label>
+                <input type="text" name="change_date" class="form-control form-control-sm"
+                       value="<?= pv('change_date') ?>" placeholder="-7">
+                <div class="date-help text-muted mt-1">Same formats as Grant Date</div>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small mb-1">ZIP Code</label>
+                <input type="text" name="zip" class="form-control form-control-sm"
+                       value="<?= pv('zip') ?>" placeholder="07848" maxlength="5">
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small mb-1">Radius (miles)</label>
+                <input type="number" name="radius_miles" class="form-control form-control-sm"
+                       value="<?= pv('radius_miles', '0') ?>" min="0" placeholder="0 = exact ZIP">
               </div>
             </div>
-            <div class="col-sm-3">
-              <label class="form-label small mb-1">Change Date</label>
-              <input type="text" name="change_date" class="form-control form-control-sm"
-                     value="<?= pv('change_date') ?>" placeholder="-7">
-              <div class="date-help text-muted mt-1">Same formats as Grant Date</div>
-            </div>
-            <div class="col-sm-3">
-              <label class="form-label small mb-1">ZIP Code</label>
-              <input type="text" name="zip" class="form-control form-control-sm"
-                     value="<?= pv('zip') ?>" placeholder="07848" maxlength="5">
-            </div>
-            <div class="col-sm-3">
-              <label class="form-label small mb-1">Radius (miles)</label>
-              <input type="number" name="radius_miles" class="form-control form-control-sm"
-                     value="<?= pv('radius_miles', '0') ?>" min="0" placeholder="0 = exact ZIP">
-            </div>
-          </div>
+          </fieldset>
 
           <div class="mt-auto">
-            <button type="submit" name="search_mode" value="search"
-                    class="btn btn-primary">
+            <button type="submit" name="search_mode" value="search" class="btn btn-primary">
               Search Records
             </button>
           </div>
@@ -436,18 +489,23 @@ if ($submitted) {
 
   </div><!-- /row -->
 
-  <!-- ── Results ──────────────────────────────────────────────────────────── -->
+  <!-- ── Results ──────────────────────────────────────────────────────── -->
   <?php if ($submitted): ?>
   <hr class="mb-4">
 
   <!-- CLI command display -->
   <?php if ($disp_cmd !== null): ?>
   <div class="card mb-3 border-0 shadow-sm">
-    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-2">
-      <span class="small fw-semibold font-monospace">hamdat CLI</span>
-      <span class="text-secondary small">Copy to run locally with your own database</span>
+    <div class="card-header cli-header d-flex justify-content-between align-items-center py-2">
+      <span class="small fw-semibold font-monospace text-white">hamdat CLI</span>
+      <div class="d-flex align-items-center gap-3">
+        <button type="button" id="btn-copy-cli" class="btn btn-sm btn-outline-light py-0 lh-sm">
+          Copy
+        </button>
+        <span class="text-secondary small">Run locally with your own database</span>
+      </div>
     </div>
-    <div class="card-body bg-dark py-2 rounded-bottom">
+    <div class="card-body cli-body py-2 rounded-bottom">
       <code class="cli-cmd"><?= esc($disp_cmd) ?></code>
     </div>
   </div>
@@ -464,7 +522,7 @@ if ($submitted) {
   <?php elseif ($result_mode === 'call'): ?>
   <div class="card shadow-sm">
     <div class="card-header">Callsign Profile</div>
-    <div class="card-body bg-white">
+    <div class="card-body">
       <pre class="hamdat-out mb-0"><?= esc($call_out ?? '') ?></pre>
     </div>
   </div>
@@ -530,6 +588,7 @@ if ($submitted) {
   var form    = document.getElementById('sf');
   var overlay = document.getElementById('search-overlay');
 
+  /* ── Spinner helper ─────────────────────────────────────────────────── */
   function spinBtn(btn, label) {
     btn.style.pointerEvents = 'none';
     btn.innerHTML =
@@ -537,18 +596,16 @@ if ($submitted) {
       + label;
   }
 
+  /* ── Form submit handler ────────────────────────────────────────────── */
   form.addEventListener('submit', function (e) {
     var btn = e.submitter;
     if (!btn) return;
 
     if (btn.name === 'search_mode') {
-      // Search: spinner + overlay. Page reloads so no reset needed.
       spinBtn(btn, 'Searching…');
       setTimeout(function () { overlay.style.display = 'flex'; }, 400);
 
     } else if (btn.name === 'download_format') {
-      // Download: spinner + overlay, but page does NOT reload after file delivery,
-      // so we reset the UI when the window regains focus or visibility.
       var origHTML     = btn.innerHTML;
       var overlayTimer = setTimeout(function () { overlay.style.display = 'flex'; }, 400);
       var fallbackTimer;
@@ -567,10 +624,42 @@ if ($submitted) {
       spinBtn(btn, 'Preparing…');
       window.addEventListener('focus', reset);
       document.addEventListener('visibilitychange', onVisible);
-      fallbackTimer = setTimeout(reset, 15000); // safety net
+      fallbackTimer = setTimeout(reset, 15000);
     }
   });
 
+  /* ── Dark / light mode toggle ───────────────────────────────────────── */
+  var themeBtn = document.getElementById('btn-theme');
+  function syncThemeBtn() {
+    var dark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+    themeBtn.textContent = dark ? '☀ Light' : '🌙 Dark';
+  }
+  syncThemeBtn();
+  themeBtn.addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-bs-theme', next);
+    localStorage.setItem('hdw-theme', next);
+    syncThemeBtn();
+  });
+
+  /* ── Copy CLI command to clipboard ─────────────────────────────────── */
+  var cliBtn = document.getElementById('btn-copy-cli');
+  if (cliBtn) {
+    var cliText = <?= json_encode($disp_cmd ?? '') ?>;
+    cliBtn.addEventListener('click', function () {
+      navigator.clipboard.writeText(cliText).then(function () {
+        cliBtn.textContent = '✓ Copied';
+        cliBtn.classList.replace('btn-outline-light', 'btn-success');
+        setTimeout(function () {
+          cliBtn.textContent = 'Copy';
+          cliBtn.classList.replace('btn-success', 'btn-outline-light');
+        }, 2000);
+      }).catch(function () {
+        cliBtn.textContent = 'Failed';
+        setTimeout(function () { cliBtn.textContent = 'Copy'; }, 2000);
+      });
+    });
+  }
 
 }());
 </script>
