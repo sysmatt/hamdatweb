@@ -242,7 +242,7 @@ if ($submitted) {
 <title>HamDat Web</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
-  pre.hamdat-out { font-size: .82rem; white-space: pre-wrap; word-break: break-all; }
+  pre.hamdat-out { font-size: 1rem; white-space: pre-wrap; word-break: break-all; }
   code.cli-cmd   { font-size: .88rem; word-break: break-all; color: #7fffb2; }
   .table-scroll thead th { position: sticky; top: 0; z-index: 1; }
   .date-help     { font-size: .75rem; }
@@ -268,6 +268,12 @@ if ($submitted) {
 
 <form method="post" id="sf">
 <input type="hidden" name="download_format" value="">
+<!-- Hidden default submit button — browser picks the first one when Enter is pressed.
+     Placing search_mode=search here makes Enter in any field trigger a multi-record search
+     rather than the callsign lookup button that appears first in visual DOM order. -->
+<button type="submit" name="search_mode" value="search"
+        style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden"
+        aria-hidden="true" tabindex="-1"></button>
 
 <div class="container-fluid py-3 px-4">
 
