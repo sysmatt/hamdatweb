@@ -41,18 +41,19 @@ function valid_date(string $s): bool {
     );
 }
 
-// Wrap a display value in double-quotes if it contains whitespace or quotes.
 function dq(string $s): string {
     return preg_match('/[\s\'"]/', $s) ? '"' . addcslashes($s, '"\\') . '"' : $s;
 }
 
 // Build the hamdat command from POST data.
-// Returns ['exec' => full shell command, 'disp' => portable display string, 'mode' => 'call'|'search']
+// Mode is determined by search_mode field ('call' | 'search') set by the submit buttons.
+// Only 'call' mode uses the callsign field; everything else (search, download) uses search mode.
 function build_cmd(array $p, string $fmt = '', string $outfile = ''): array {
     $exec = [HAMDAT_BIN, '--db', escapeshellarg(HAMDAT_DB)];
     $disp = ['hamdat'];
     $mode = 'search';
-    $call = strtoupper(trim($p['call'] ?? ''));
+
+    $call = (($p['search_mode'] ?? '') === 'call') ? strtoupper(trim($p['call'] ?? '')) : '';
 
     if ($call !== '') {
         $mode = 'call';
@@ -114,16 +115,14 @@ function build_cmd(array $p, string $fmt = '', string $outfile = ''): array {
         $disp[] = '--' . $fmt;
         if ($outfile !== '') {
             array_push($exec, '--file', escapeshellarg($outfile));
-            // temp path intentionally excluded from display
         }
     }
 
     return ['exec' => implode(' ', $exec), 'disp' => implode(' ', $disp), 'mode' => $mode];
 }
 
-function has_criteria(array $p): bool {
-    return trim($p['call'] ?? '')       !== ''
-        || trim($p['callsearch'] ?? '') !== ''
+function has_search_criteria(array $p): bool {
+    return trim($p['callsearch'] ?? '') !== ''
         || trim($p['name'] ?? '')       !== ''
         || trim($p['address'] ?? '')    !== ''
         || !empty($p['class'])
@@ -144,35 +143,36 @@ $error_msg    = null;
 $submitted    = ($_SERVER['REQUEST_METHOD'] === 'POST');
 
 if ($submitted) {
-    if (!has_criteria($_POST)) {
-        $result_mode = 'error';
-        $error_msg   = 'Please enter at least one search criterion.';
-    } else {
-        $dl_fmt = praw('download_format');
+    $dl_fmt      = praw('download_format');
+    $search_mode = praw('search_mode');
 
-        if ($dl_fmt !== '' && isset(FORMATS[$dl_fmt])) {
-            // ── Download: write to temp file, stream, exit ────────────────
-            $tmp = tempnam(HAMDAT_TEMP_DIR, 'hamdatweb_') . '.' . $dl_fmt;
-            $cmd = build_cmd($_POST, $dl_fmt, $tmp);
-            $disp_cmd = $cmd['disp'];
-            exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
-            if ($rc === 0 && is_readable($tmp) && filesize($tmp) > 0) {
-                $mime = ['csv' => 'text/csv', 'json' => 'application/json', 'html' => 'text/html'];
-                header('Content-Type: ' . $mime[$dl_fmt]);
-                header('Content-Disposition: attachment; filename="hamdat_results.' . $dl_fmt . '"');
-                header('Content-Length: ' . filesize($tmp));
-                readfile($tmp);
-                @unlink($tmp);
-                exit;
-            }
-            $error_msg   = $rc !== 0
-                ? ('hamdat error: ' . implode("\n", $exec_out))
-                : 'Output file was not created or was empty.';
-            $result_mode = 'error';
+    if ($dl_fmt !== '' && isset(FORMATS[$dl_fmt])) {
+        // ── Download: write to temp file, stream, exit ────────────────────
+        $tmp = tempnam(HAMDAT_TEMP_DIR, 'hamdatweb_') . '.' . $dl_fmt;
+        $cmd = build_cmd($_POST, $dl_fmt, $tmp);
+        $disp_cmd = $cmd['disp'];
+        exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
+        if ($rc === 0 && is_readable($tmp) && filesize($tmp) > 0) {
+            $mime = ['csv' => 'text/csv', 'json' => 'application/json', 'html' => 'text/html'];
+            header('Content-Type: ' . $mime[$dl_fmt]);
+            header('Content-Disposition: attachment; filename="hamdat_results.' . $dl_fmt . '"');
+            header('Content-Length: ' . filesize($tmp));
+            readfile($tmp);
             @unlink($tmp);
+            exit;
+        }
+        $error_msg   = $rc !== 0
+            ? ('hamdat error: ' . implode("\n", $exec_out))
+            : 'Output file was not created or was empty.';
+        $result_mode = 'error';
+        @unlink($tmp);
 
-        } elseif (strtoupper(praw('call')) !== '') {
-            // ── Single callsign profile ───────────────────────────────────
+    } elseif ($search_mode === 'call') {
+        // ── Single callsign profile ───────────────────────────────────────
+        if (praw('call') === '') {
+            $error_msg   = 'Please enter a callsign to look up.';
+            $result_mode = 'error';
+        } else {
             $cmd      = build_cmd($_POST);
             $disp_cmd = $cmd['disp'];
             exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
@@ -183,12 +183,17 @@ if ($submitted) {
                 $error_msg   = implode("\n", $exec_out);
                 $result_mode = 'error';
             }
+        }
 
+    } elseif ($search_mode === 'search') {
+        // ── Multi-record search (CSV internally → HTML table) ─────────────
+        if (!has_search_criteria($_POST)) {
+            $error_msg   = 'Please enter at least one search criterion.';
+            $result_mode = 'error';
         } else {
-            // ── Multi-record search (CSV internally → HTML table) ─────────
             $tmp      = tempnam(HAMDAT_TEMP_DIR, 'hamdatweb_') . '.csv';
             $cmd      = build_cmd($_POST, 'csv', $tmp);
-            $disp_cmd = build_cmd($_POST)['disp'];   // display without format flag (table is default)
+            $disp_cmd = build_cmd($_POST)['disp'];
             exec($cmd['exec'] . ' 2>&1', $exec_out, $rc);
             if ($rc !== 0) {
                 $error_msg   = 'hamdat error: ' . implode("\n", $exec_out);
@@ -224,9 +229,26 @@ if ($submitted) {
   .table-scroll  { max-height: 70vh; overflow-y: auto; }
   .table-scroll thead th { position: sticky; top: 0; z-index: 1; }
   .date-help     { font-size: .75rem; }
+  #search-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    z-index: 9999;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
 </style>
 </head>
 <body class="bg-light">
+
+<!-- Loading overlay (shown after 400ms on submit) -->
+<div id="search-overlay" role="status" aria-live="polite">
+  <div class="spinner-border text-light" style="width: 3rem; height: 3rem;"></div>
+  <div class="text-light mt-3 fs-5">Searching&hellip;</div>
+</div>
+
 <form method="post" id="sf">
 <input type="hidden" name="download_format" value="">
 
@@ -250,29 +272,32 @@ if ($submitted) {
     <div class="col-xl-3 col-lg-4">
       <div class="card h-100">
         <div class="card-header fw-semibold">Single Callsign Lookup</div>
-        <div class="card-body">
-          <label class="form-label small mb-1">Callsign <code>--call</code></label>
-          <input type="text" name="call" class="form-control text-uppercase mb-3"
-                 value="<?= pv('call') ?>" placeholder="W1AW" autocomplete="off">
+        <div class="card-body d-flex flex-column">
+          <div class="mb-3">
+            <label class="form-label small mb-1">Callsign</label>
+            <input type="text" name="call" class="form-control text-uppercase"
+                   value="<?= pv('call') ?>" placeholder="W1AW" autocomplete="off">
+          </div>
           <div class="form-check mb-2">
             <input type="checkbox" name="history" id="chk_hist" class="form-check-input"
                    <?= pchk('history') ? 'checked' : '' ?>>
             <label for="chk_hist" class="form-check-label small">
-              <code>--history</code> — compact list of prior licensees
+              History — compact list of prior licensees
             </label>
           </div>
-          <div class="form-check">
+          <div class="form-check mb-3">
             <input type="checkbox" name="full_history" id="chk_fhist" class="form-check-input"
                    <?= pchk('full_history') ? 'checked' : '' ?>>
             <label for="chk_fhist" class="form-check-label small">
-              <code>--full-history</code> — full profiles of prior licensees
+              Full history — complete profiles of prior licensees
             </label>
           </div>
-          <hr class="my-3">
-          <p class="text-muted small mb-0">
-            Fill in Callsign <strong>or</strong> the search fields on the right — not both.
-            If Callsign is provided, the search fields are ignored.
-          </p>
+          <div class="mt-auto">
+            <button type="submit" name="search_mode" value="call"
+                    class="btn btn-primary w-100">
+              Lookup Callsign
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -284,22 +309,22 @@ if ($submitted) {
           Multi-record Search
           <span class="text-muted fw-normal small ms-2">— all filters AND together; Class values OR within themselves</span>
         </div>
-        <div class="card-body">
+        <div class="card-body d-flex flex-column">
 
           <!-- Text search -->
           <div class="row g-2 mb-3">
             <div class="col-md-4">
-              <label class="form-label small mb-1">Callsign contains <code>--callsearch</code></label>
+              <label class="form-label small mb-1">Callsign contains</label>
               <input type="text" name="callsearch" class="form-control form-control-sm"
                      value="<?= pv('callsearch') ?>">
             </div>
             <div class="col-md-4">
-              <label class="form-label small mb-1">Name contains <code>--name</code></label>
+              <label class="form-label small mb-1">Name contains</label>
               <input type="text" name="name" class="form-control form-control-sm"
                      value="<?= pv('name') ?>">
             </div>
             <div class="col-md-4">
-              <label class="form-label small mb-1">Address contains <code>--address</code></label>
+              <label class="form-label small mb-1">Address contains</label>
               <input type="text" name="address" class="form-control form-control-sm"
                      value="<?= pv('address') ?>">
             </div>
@@ -311,8 +336,7 @@ if ($submitted) {
               <input type="checkbox" name="regex" id="chk_regex" class="form-check-input"
                      <?= pchk('regex') ? 'checked' : '' ?>>
               <label for="chk_regex" class="form-check-label small">
-                Treat callsign / name / address as Python regular expressions
-                <code>--regex</code>
+                Treat callsign / name / address as regular expressions
               </label>
             </div>
           </div>
@@ -320,7 +344,7 @@ if ($submitted) {
           <!-- Class + Type -->
           <div class="row g-2 mb-3">
             <div class="col-md-8">
-              <label class="form-label small mb-1">License Class <code>--class</code></label>
+              <label class="form-label small mb-1">License Class</label>
               <div class="d-flex flex-wrap gap-3">
                 <?php foreach (CLASSES as $code => $label): ?>
                 <div class="form-check mb-0">
@@ -335,7 +359,7 @@ if ($submitted) {
               </div>
             </div>
             <div class="col-md-4">
-              <label class="form-label small mb-1">Entity Type <code>--type</code></label>
+              <label class="form-label small mb-1">Entity Type</label>
               <select name="type" class="form-select form-select-sm">
                 <option value="">Any</option>
                 <?php foreach (TYPES as $t): ?>
@@ -348,32 +372,39 @@ if ($submitted) {
           </div>
 
           <!-- Dates + ZIP -->
-          <div class="row g-2">
+          <div class="row g-2 mb-3">
             <div class="col-sm-3">
-              <label class="form-label small mb-1">Grant Date <code>--grant-date</code></label>
+              <label class="form-label small mb-1">Grant Date</label>
               <input type="text" name="grant_date" class="form-control form-control-sm"
                      value="<?= pv('grant_date') ?>" placeholder="-30">
               <div class="date-help text-muted mt-1">
-                <code>-30</code> · <code>2025-01-01</code> · <code>2025-01-01:2025-12-31</code><br>
+                <code>-30</code> &middot; <code>2025-01-01</code> &middot; <code>2025-01-01:2025-12-31</code><br>
                 <code>since:</code> <code>after:</code> <code>thru:</code> <code>before:</code>
               </div>
             </div>
             <div class="col-sm-3">
-              <label class="form-label small mb-1">Change Date <code>--change-date</code></label>
+              <label class="form-label small mb-1">Change Date</label>
               <input type="text" name="change_date" class="form-control form-control-sm"
                      value="<?= pv('change_date') ?>" placeholder="-7">
               <div class="date-help text-muted mt-1">Same formats as Grant Date</div>
             </div>
             <div class="col-sm-3">
-              <label class="form-label small mb-1">ZIP Code <code>--zip</code></label>
+              <label class="form-label small mb-1">ZIP Code</label>
               <input type="text" name="zip" class="form-control form-control-sm"
                      value="<?= pv('zip') ?>" placeholder="07848" maxlength="5">
             </div>
             <div class="col-sm-3">
-              <label class="form-label small mb-1">Radius Miles <code>--radius-miles</code></label>
+              <label class="form-label small mb-1">Radius (miles)</label>
               <input type="number" name="radius_miles" class="form-control form-control-sm"
                      value="<?= pv('radius_miles', '0') ?>" min="0" placeholder="0 = exact ZIP">
             </div>
+          </div>
+
+          <div class="mt-auto">
+            <button type="submit" name="search_mode" value="search"
+                    class="btn btn-primary">
+              Search Records
+            </button>
           </div>
 
         </div><!-- /card-body -->
@@ -381,11 +412,6 @@ if ($submitted) {
     </div><!-- /col -->
 
   </div><!-- /row -->
-
-  <!-- Submit -->
-  <div class="mb-4">
-    <button type="submit" class="btn btn-primary">Search — View as Table</button>
-  </div>
 
   <!-- ── Results ──────────────────────────────────────────────────────────── -->
   <?php if ($submitted): ?>
@@ -466,5 +492,27 @@ if ($submitted) {
 
 </div><!-- /container-fluid -->
 </form>
+
+<script>
+(function () {
+  var form    = document.getElementById('sf');
+  var overlay = document.getElementById('search-overlay');
+
+  form.addEventListener('submit', function () {
+    // Immediate feedback: disable the clicked button and show inline spinner
+    var btn = document.activeElement;
+    if (btn && btn.type === 'submit' && btn.form === form) {
+      btn.disabled = true;
+      btn.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>'
+        + 'Searching…';
+    }
+    // Delayed overlay: only appears if the query takes longer than 400ms
+    setTimeout(function () {
+      overlay.style.display = 'flex';
+    }, 400);
+  });
+}());
+</script>
 </body>
 </html>
