@@ -84,10 +84,17 @@ function build_cmd(array $p, string $fmt = '', string $outfile = ''): array {
             }
         }
 
-        $type = strtolower(trim($p['type'] ?? ''));
-        if ($type !== '' && in_array($type, TYPES, true)) {
-            array_push($exec, '--type', escapeshellarg($type));
-            array_push($disp, '--type', $type);
+        $types = array_values(array_filter(
+            array_map('strtolower', (array) ($p['type'] ?? [])),
+            fn($t) => in_array($t, TYPES, true)
+        ));
+        if ($types) {
+            $exec[] = '--type';
+            $disp[] = '--type';
+            foreach ($types as $t) {
+                $exec[] = escapeshellarg($t);
+                $disp[] = $t;
+            }
         }
 
         foreach (['grant_date' => '--grant-date', 'change_date' => '--change-date'] as $field => $flag) {
@@ -126,7 +133,7 @@ function has_search_criteria(array $p): bool {
         || trim($p['name'] ?? '')       !== ''
         || trim($p['address'] ?? '')    !== ''
         || !empty($p['class'])
-        || trim($p['type'] ?? '')       !== ''
+        || !empty($p['type'])
         || trim($p['grant_date'] ?? '') !== ''
         || trim($p['change_date'] ?? '') !== ''
         || trim($p['zip'] ?? '')        !== '';
@@ -436,14 +443,18 @@ if ($submitted) {
             <div class="col-md-4">
               <fieldset class="field-group h-100">
                 <legend>Entity Type</legend>
-                <select name="type" class="form-select form-select-sm">
-                  <option value="">Any</option>
+                <div class="d-flex flex-column gap-1 pt-1">
                   <?php foreach (TYPES as $t): ?>
-                  <option value="<?= $t ?>" <?= praw('type') === $t ? 'selected' : '' ?>>
-                    <?= ucfirst($t) ?>
-                  </option>
+                  <div class="form-check mb-0">
+                    <input type="checkbox" name="type[]" id="typ_<?= $t ?>" value="<?= $t ?>"
+                           class="form-check-input"
+                           <?= in_array($t, parr('type'), true) ? 'checked' : '' ?>>
+                    <label for="typ_<?= $t ?>" class="form-check-label small">
+                      <?= ucfirst($t) ?>
+                    </label>
+                  </div>
                   <?php endforeach; ?>
-                </select>
+                </div>
               </fieldset>
             </div>
           </div>
