@@ -258,7 +258,7 @@ if ($submitted) {
 
   /* ── Placeholder text: italic + faded so it's clearly not real input ── */
   .form-control::placeholder,
-  .form-select::placeholder { font-style: italic; opacity: 0.25; }
+  .form-select::placeholder { font-style: italic; opacity: 0.30; }
 
   /* ── CLI terminal card — always dark regardless of theme ────────────── */
   code.cli-cmd { font-size: .88rem; word-break: break-all; color: #7fffb2; }
@@ -269,7 +269,7 @@ if ($submitted) {
   .table-scroll thead th { position: sticky; top: 0; z-index: 1; }
 
   /* ── Date format hint text ───────────────────────────────────────────── */
-  .date-help { font-size: .73rem; }
+  .date-help { font-size: .73rem; border-collapse: separate; border-spacing: .5rem 0; }
 
   /* ── Loading overlay ─────────────────────────────────────────────────── */
   #search-overlay {
@@ -477,16 +477,16 @@ if ($submitted) {
                            value="<?= pv('change_date') ?>" placeholder="-7">
                   </div>
                 </div>
-                <div class="date-help text-muted lh-sm">
-                  <span class="me-3"><code>-30</code> last 30 days &nbsp; <code>+7</code> next 7 days</span>
-                  <span class="me-3"><code>2025-06-01</code> exact date</span>
-                  <span><code>2025-01-01:2025-12-31</code> date range</span><br class="d-none d-xl-block">
-                  <span class="me-2 mt-1 d-inline-block">Keywords followed by <code>YYYY-MM-DD</code>:</span>
-                  <code>since:</code> on or after &nbsp;
-                  <code>after:</code> strictly after &nbsp;
-                  <code>thru:</code> on or before &nbsp;
-                  <code>before:</code> strictly before
-                </div>
+                <table class="date-help text-muted mt-2 w-100">
+                  <tr><td><code>-30</code></td>        <td>last 30 days</td></tr>
+                  <tr><td><code>+7</code></td>         <td>next 7 days</td></tr>
+                  <tr><td><code>2025-06-01</code></td> <td>exact date</td></tr>
+                  <tr><td><code>2025-01-01:2025-12-31</code></td><td>inclusive range</td></tr>
+                  <tr><td><code>since:2025-06-01</code></td>  <td>on or after (inclusive)</td></tr>
+                  <tr><td><code>after:2025-06-01</code></td>  <td>strictly after (exclusive)</td></tr>
+                  <tr><td><code>thru:2025-06-01</code></td>   <td>on or before (inclusive)</td></tr>
+                  <tr><td><code>before:2025-06-01</code></td> <td>strictly before (exclusive)</td></tr>
+                </table>
               </fieldset>
             </div>
             <div class="col-lg-4">
