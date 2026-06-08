@@ -249,6 +249,9 @@ if ($submitted) {
   /* ── Profile <pre> output ───────────────────────────────────────────── */
   pre.hamdat-out { font-size: 1rem; white-space: pre-wrap; word-break: break-all; }
 
+  /* ── Placeholder text: italic + faded so it's clearly not real input ── */
+  ::placeholder { font-style: italic; opacity: 0.55; }
+
   /* ── CLI terminal card — always dark regardless of theme ────────────── */
   code.cli-cmd { font-size: .88rem; word-break: break-all; color: #7fffb2; }
   .cli-header  { background-color: #1a1d21 !important; color: #fff !important; }
@@ -258,7 +261,7 @@ if ($submitted) {
   .table-scroll thead th { position: sticky; top: 0; z-index: 1; }
 
   /* ── Date format hint text ───────────────────────────────────────────── */
-  .date-help { font-size: .75rem; }
+  .date-help { font-size: .73rem; }
 
   /* ── Loading overlay ─────────────────────────────────────────────────── */
   #search-overlay {
@@ -446,36 +449,52 @@ if ($submitted) {
           </div>
 
           <!-- Dates + ZIP -->
-          <fieldset class="field-group">
-            <legend>Date &amp; Location</legend>
-            <div class="row g-2">
-              <div class="col-sm-3">
-                <label class="form-label small mb-1">Grant Date</label>
-                <input type="text" name="grant_date" class="form-control form-control-sm"
-                       value="<?= pv('grant_date') ?>" placeholder="-30">
-                <div class="date-help text-muted mt-1">
-                  <code>-30</code> &middot; <code>2025-01-01</code> &middot; <code>2025-01-01:2025-12-31</code><br>
-                  <code>since:</code> <code>after:</code> <code>thru:</code> <code>before:</code>
+          <div class="row g-3">
+            <div class="col-lg-8">
+              <fieldset class="field-group h-100">
+                <legend>Date Filter</legend>
+                <div class="row g-2 mb-2">
+                  <div class="col-sm-6">
+                    <label class="form-label small mb-1">Grant Date</label>
+                    <input type="text" name="grant_date" class="form-control form-control-sm"
+                           value="<?= pv('grant_date') ?>" placeholder="-30">
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label small mb-1">Change Date</label>
+                    <input type="text" name="change_date" class="form-control form-control-sm"
+                           value="<?= pv('change_date') ?>" placeholder="-7">
+                  </div>
                 </div>
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small mb-1">Change Date</label>
-                <input type="text" name="change_date" class="form-control form-control-sm"
-                       value="<?= pv('change_date') ?>" placeholder="-7">
-                <div class="date-help text-muted mt-1">Same formats as Grant Date</div>
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small mb-1">ZIP Code</label>
-                <input type="text" name="zip" class="form-control form-control-sm"
-                       value="<?= pv('zip') ?>" placeholder="07848" maxlength="5">
-              </div>
-              <div class="col-sm-3">
-                <label class="form-label small mb-1">Radius (miles)</label>
-                <input type="number" name="radius_miles" class="form-control form-control-sm"
-                       value="<?= pv('radius_miles', '0') ?>" min="0" placeholder="0 = exact ZIP">
-              </div>
+                <div class="date-help text-muted lh-sm">
+                  <span class="me-3"><code>-30</code> last 30 days &nbsp; <code>+7</code> next 7 days</span>
+                  <span class="me-3"><code>2025-06-01</code> exact date</span>
+                  <span><code>2025-01-01:2025-12-31</code> date range</span><br class="d-none d-xl-block">
+                  <span class="me-2 mt-1 d-inline-block">Keywords followed by <code>YYYY-MM-DD</code>:</span>
+                  <code>since:</code> on or after &nbsp;
+                  <code>after:</code> strictly after &nbsp;
+                  <code>thru:</code> on or before &nbsp;
+                  <code>before:</code> strictly before
+                </div>
+              </fieldset>
             </div>
-          </fieldset>
+            <div class="col-lg-4">
+              <fieldset class="field-group h-100">
+                <legend>Location</legend>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label small mb-1">ZIP Code</label>
+                    <input type="text" name="zip" class="form-control form-control-sm"
+                           value="<?= pv('zip') ?>" placeholder="07848" maxlength="5">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small mb-1">Radius (mi)</label>
+                    <input type="number" name="radius_miles" class="form-control form-control-sm"
+                           value="<?= pv('radius_miles', '0') ?>" min="0" placeholder="0 = exact">
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+          </div>
 
           <div class="mt-auto">
             <button type="submit" name="search_mode" value="search" class="btn btn-primary">
