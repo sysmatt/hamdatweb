@@ -257,7 +257,7 @@ if ($submitted) {
   pre.hamdat-out { font-size: 1rem; white-space: pre-wrap; word-break: break-all; }
 
   /* ── Placeholder text: italic + faded so it's clearly not real input ── */
-  ::placeholder { font-style: italic; opacity: 0.35; }
+  ::placeholder { font-style: italic; opacity: 0.25; }
 
   /* ── CLI terminal card — always dark regardless of theme ────────────── */
   code.cli-cmd { font-size: .88rem; word-break: break-all; color: #7fffb2; }
