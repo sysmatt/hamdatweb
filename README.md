@@ -22,14 +22,16 @@ Protected by [simplewebauth](../simplewebauth/) session authentication.
 `hamdatweb` is a single PHP file (`index.php`) that:
 
 1. Authenticates the user via `simplewebauth` before rendering anything.
-2. Presents a search form exposing all hamdat query options.
+2. Presents a search form exposing all hamdat query options, organized into labeled groups.
 3. Assembles a `hamdat` CLI invocation from the submitted form fields, sanitizing all inputs
    with `escapeshellarg()`.
 4. Executes hamdat as a subprocess and captures its output.
-5. Displays the assembled CLI command prominently after every query — useful for learning
-   hamdat syntax or reproducing results on a local installation.
-6. For multi-record searches, renders results as a scrollable HTML table.
-7. For single-callsign lookups (`--call`), renders the formatted profile output in a `<pre>` block.
+5. Displays the assembled CLI command after every query — useful for learning hamdat syntax
+   or reproducing results on a local installation. A **Copy** button copies it to the clipboard.
+6. For multi-record searches, renders results as a full-page HTML table with sticky column headers.
+   Callsign cells are clickable links that look up the individual operator profile; right-click
+   or middle-click to open in a new tab.
+7. For single-callsign lookups, renders the full formatted hamdat profile in a `<pre>` block.
 8. Allows downloading the same query result in CSV, JSON, or HTML by re-running the query
    with the appropriate hamdat output flag.
 
@@ -126,6 +128,9 @@ The web server process (e.g. `www-data`) must be able to:
 - **Read** the hamdat SQLite database file (`hamdat.db`) and its parent directory
 - **Write** to the temp directory defined by `HAMDAT_TEMP_DIR` (used briefly during downloads)
 
+The database must be readable but does **not** need to be writable by the web server — hamdat
+opens it in read-only mode for all queries.
+
 ```bash
 # Example: allow www-data to read the hamdat database
 chown ubuntu:www-data /home/ubuntu/.hamdat/hamdat.db
@@ -166,27 +171,57 @@ rather than a blank page or PHP warning.
 
 ---
 
+## UI overview
+
+### Theme
+
+A **🌙 Dark / ☀ Light** toggle in the page header switches between light and dark mode.
+The preference is saved in `localStorage` and applied before the page renders, so there
+is no flash on reload.
+
+### Search form
+
+The form is split into two panels:
+
+**Single Callsign Lookup** — looks up one specific callsign and returns its full FCC profile.
+
+**Multi-record Search** — returns a table of all active licensees matching the given filters.
+All filters AND together; multiple selections within License Class or Entity Type OR within
+themselves.
+
+Fields are organized into clearly labeled groups (Text Search, License Class, Entity Type,
+Date Filter, Location) so related controls are visually grouped together.
+
+### Results
+
+After a search, a dark terminal-style **hamdat CLI** card shows the exact command that was
+run, with a **Copy** button. The command omits server-specific details (`--db` path, temp
+file path) and can be pasted directly into a terminal on any machine with a local hamdat
+installation.
+
+Multi-record results render as a full-page table. Callsign cells are linked — click to look
+up that callsign's profile, or right-click / middle-click / Ctrl+click to open in a new tab.
+The looked-up callsign is pre-populated in the search field so you can then add `--history`
+and search again.
+
+Download buttons (CSV, JSON, HTML) re-run the identical query and stream the file directly
+to the browser. All buttons show a spinner while the server is working.
+
+---
+
 ## Search options
 
 ### Single callsign lookup
 
-Looks up one specific callsign and returns its full FCC profile.
-
 | UI field | hamdat flag | Notes |
 |---|---|---|
 | Callsign | `--call` | Exact match, case-insensitive |
-| Prior licensees (compact) | `--history` | Appends a compact table of all past holders of the callsign |
-| Prior licensees (full) | `--full-history` | Appends full formatted profiles for every prior licensee |
+| History — compact | `--history` | Appends a compact table of all past holders of the callsign |
+| History — full | `--full-history` | Appends full formatted profiles for every prior licensee |
 
 Results are displayed as preformatted text, preserving hamdat's profile layout.
 
-> **Single callsign vs. search:** if the Callsign field contains a value, it takes priority
-> and all multi-record search fields are ignored.
-
 ### Multi-record search
-
-Returns a table of all active licensees matching the given filters. All filters AND together;
-multiple License Class selections OR within themselves.
 
 | UI field | hamdat flag | Notes |
 |---|---|---|
@@ -194,25 +229,12 @@ multiple License Class selections OR within themselves.
 | Name contains | `--name` | Substring or regex match against licensee name |
 | Address contains | `--address` | Substring or regex match against full mailing address |
 | Regular expressions | `--regex` | Treats the three text fields above as Python regex patterns |
-| License Class | `--class` | Check any combination: T G E A N P |
-| Entity Type | `--type` | `individual`, `club`, `races`, `military`, `government` |
-| Grant Date | `--grant-date` | See date format reference below |
-| Change Date | `--change-date` | See date format reference below |
+| License Class | `--class` | Check any combination: T G E A N P — OR logic within, AND with other filters |
+| Entity Type | `--type` | Check any combination — OR logic within, AND with other filters |
+| Grant Date | `--grant-date` | See [date format reference](#date-format-reference) below |
+| Change Date | `--change-date` | Same format as Grant Date |
 | ZIP Code | `--zip` | 5-digit US ZIP code |
-| Radius Miles | `--radius-miles` | Search radius around ZIP; `0` = exact ZIP only |
-
-#### Date format reference
-
-| Format | Meaning |
-|---|---|
-| `-30` | Last 30 days |
-| `+7` | Next 7 days |
-| `2025-06-01` | Exact date |
-| `2025-01-01:2025-12-31` | Inclusive date range |
-| `since:2025-01-01` | On or after (date included) |
-| `after:2025-01-01` | Strictly after (date excluded) |
-| `thru:2025-12-31` | On or before (date included) |
-| `before:2025-12-31` | Strictly before (date excluded) |
+| Radius (miles) | `--radius-miles` | Search radius around ZIP; `0` = exact ZIP only |
 
 ### License class codes
 
@@ -220,10 +242,33 @@ multiple License Class selections OR within themselves.
 |---|---|
 | T | Technician |
 | G | General |
-| E | Extra |
+| E | Amateur Extra |
 | A | Advanced |
 | N | Novice |
 | P | Technician Plus |
+
+### Entity type values
+
+| Value | Description |
+|---|---|
+| individual | Individual person |
+| club | Amateur radio club |
+| races | RACES organization |
+| military | Military recreation |
+| government | Government entity |
+
+### Date format reference
+
+| Format | Meaning |
+|---|---|
+| `-30` | Last 30 days |
+| `+7` | Next 7 days |
+| `2025-06-01` | Exact date |
+| `2025-01-01:2025-12-31` | Inclusive date range |
+| `since:2025-06-01` | On or after (date included) |
+| `after:2025-06-01` | Strictly after (date excluded) |
+| `thru:2025-12-31` | On or before (date included) |
+| `before:2025-12-31` | Strictly before (date excluded) |
 
 ---
 
@@ -238,7 +283,7 @@ results card header:
 
 Clicking a download button re-runs the identical query against hamdat with the corresponding
 output flag (`--csv`, `--json`, or `--html`). The assembled CLI command displayed for the
-download includes the format flag, so users can see exactly what was run.
+download includes the format flag.
 
 Downloads are streamed directly to the browser and the temp file is deleted immediately
 after transfer.
@@ -247,8 +292,7 @@ after transfer.
 
 ## The CLI command display
 
-After every query — whether a table view, a callsign profile, or a download — the assembled
-`hamdat` command is shown in a dark terminal-style card:
+After every query the assembled `hamdat` command is shown in a dark terminal-style card:
 
 ```
 hamdat --name "Smith" --class T G --grant-date -30
@@ -257,7 +301,7 @@ hamdat --name "Smith" --class T G --grant-date -30
 This command is **portable**: it omits server-specific details (`--db` path, temp `--file`
 path) and can be pasted directly into a terminal on any machine that has `hamdat` installed
 and a local database built. For downloads, the appropriate format flag is included
-(e.g. `--csv`).
+(e.g. `--csv`). A **Copy** button copies the command to the clipboard.
 
 This feature makes hamdatweb useful as a query builder, not just a search tool.
 
@@ -283,6 +327,7 @@ Your `hamdatweb-config.php` in the docroot parent will not be touched.
 - License class and entity type values are validated against a hardcoded whitelist.
 - ZIP codes are validated as exactly five digits.
 - The web server runs hamdat as a subprocess and never opens the SQLite database directly.
+  The database does not need to be writable by the web server user.
 - Session authentication, CSRF protection, and secure cookie flags are handled by
   `simplewebauth`. See that project for details.
 - `exec()` must be available in your PHP environment. If your host disables it in
@@ -307,6 +352,12 @@ Your `hamdatweb-config.php` in the docroot parent will not be touched.
   in `php.ini`. Running the displayed CLI command manually as the web server user is a
   useful diagnostic step.
 
+**ZIP code search fails with a permissions error**
+: hamdat caches pgeocode ZIP geocoding data in the same directory as the database
+  (`<db-dir>/pgeocode/`). The web server user needs read access to that directory.
+  Run `hamdat --pull` once as a user with write access to pre-seed the cache; after
+  that, queries only need read access.
+
 **Download button produces an error**
 : The web server process must be able to write to `HAMDAT_TEMP_DIR`. Check directory
   permissions. The default (`sys_get_temp_dir()`, usually `/tmp`) is writable by most
@@ -314,7 +365,7 @@ Your `hamdatweb-config.php` in the docroot parent will not be touched.
 
 **Results appear but the table is empty**
 : The query ran successfully but returned zero records. Relax your search criteria.
-  If you used `--zip` without `--radius-miles`, only exact ZIP matches are returned.
+  If you used ZIP without a radius, only exact ZIP matches are returned.
 
 ---
 
